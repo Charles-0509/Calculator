@@ -8,13 +8,20 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import io
 import base64
+import os
+
 
 class SymPyCalculator:
     def __init__(self, root):
         self.root = root
-        self.root.title("SymPy科学计算器")
-        self.root.geometry("1400x900")
+        self.root.title("科学计算器")
+        self.root.geometry("600x800")
+
+        #self.root.iconbitmap('icon.ico')
         self.root.configure(bg='#f0f0f0')
+        
+        # 设置窗口最小安全尺寸
+        self.root.minsize(400, 800)
         
         # 创建符号变量
         self.x, self.y, self.z = symbols('x y z')
@@ -41,11 +48,17 @@ class SymPyCalculator:
         # 主框架
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=0)  # 显示区
+        main_frame.rowconfigure(2, weight=1)  # 按钮区和右侧区
+        main_frame.columnconfigure(0, weight=1)  # 左侧按钮区
+        main_frame.columnconfigure(1, weight=1)  # 右侧历史记录区
         
         # 顶部设置框架
         settings_frame = ttk.Frame(main_frame)
-        settings_frame.grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
-        
+        settings_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+
         # LaTeX开关
         latex_check = ttk.Checkbutton(settings_frame, text="启用LaTeX显示", 
                                      variable=self.latex_enabled,
@@ -54,14 +67,15 @@ class SymPyCalculator:
         
         # 显示区域
         display_frame = ttk.LabelFrame(main_frame, text="显示区", padding="5")
-        display_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        display_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        display_frame.columnconfigure(0, weight=1)
+        display_frame.columnconfigure(1, weight=1)
         
         # 输入框 - 修复鼠标控制问题
-        self.entry = tk.Entry(display_frame, font=("Arial", 14), width=80)
+        self.entry = tk.Entry(display_frame, font=("Arial", 14), width=60)  # 原为80，缩小宽度
         self.entry.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
         
         # 移除可能干扰鼠标交互的事件绑定
-        # self.entry.bind("<Button-1>", self.on_entry_click)  # 删除这行
         self.entry.bind("<FocusIn>", self.on_entry_focus_in)
         
         # 输入表达式显示标签（纯文本显示输入）
@@ -75,7 +89,7 @@ class SymPyCalculator:
         latex_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
         
         # 创建matplotlib图形用于LaTeX渲染
-        self.latex_fig = Figure(figsize=(12, 1.5), facecolor='white')
+        self.latex_fig = Figure(figsize=(7, 1), facecolor='white')  # 原为(8, 1)，缩小宽度
         self.latex_ax = self.latex_fig.add_subplot(111)
         self.latex_ax.axis('off')
         
@@ -89,13 +103,14 @@ class SymPyCalculator:
         self.result_label.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E))
         
         # 左侧按钮面板
-        button_frame = ttk.LabelFrame(main_frame, text="功能按钮", padding="5")
-        button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        # button_frame = ttk.LabelFrame(main_frame, text="功能按钮", padding="5")
+        # button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        button_frame = ttk.LabelFrame(main_frame, text="功能按钮")
+        button_frame.grid(row=2, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
+        button_frame.rowconfigure(0, weight=1)
+        button_frame.columnconfigure(0, weight=1)
         
         # 基础运算按钮
-        basic_frame = ttk.LabelFrame(button_frame, text="基础运算", padding="5")
-        basic_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
-        
         basic_buttons = [
             ('7', '8', '9', '/'),
             ('4', '5', '6', '*'),
@@ -103,61 +118,97 @@ class SymPyCalculator:
             ('0', '.', '=', '+'),
             ('(', ')', 'C', '←')
         ]
-        
+        basic_frame = ttk.LabelFrame(button_frame, text="基础运算", padding="5")
+        basic_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+        basic_frame.columnconfigure((0,1,2,3), weight=1)  # 让按钮等宽自适应
         for i, row in enumerate(basic_buttons):
+            basic_frame.rowconfigure(i, weight=1)  # 行自适应
             for j, btn_text in enumerate(row):
-                btn = ttk.Button(basic_frame, text=btn_text, width=5,
+                btn = ttk.Button(basic_frame, text=btn_text, 
                                command=lambda t=btn_text: self.button_click(t))
-                btn.grid(row=i, column=j, padx=2, pady=2)
+                btn.grid(row=i, column=j, padx=2, pady=2, sticky=(tk.N, tk.S, tk.W, tk.E))
         
         # 科学计算按钮
-        sci_frame = ttk.LabelFrame(button_frame, text="科学计算", padding="5")
-        sci_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
-        
         sci_buttons = [
             ('sin', 'cos', 'tan', 'π'),
             ('asin', 'acos', 'atan', 'e'),
             ('ln', 'log', 'exp', '^'),
-            ('sqrt', '²', '!', 'abs')
+            ('sqrt', '²', '!', 'abs'),
         ]
-        
+        sci_frame = ttk.LabelFrame(button_frame, text="科学计算", padding="5")
+        sci_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+        sci_frame.columnconfigure((0,1,2,3), weight=1)
         for i, row in enumerate(sci_buttons):
+            sci_frame.rowconfigure(i, weight=1)
             for j, btn_text in enumerate(row):
-                btn = ttk.Button(sci_frame, text=btn_text, width=5,
+                btn = ttk.Button(sci_frame, text=btn_text,
                                command=lambda t=btn_text: self.sci_button_click(t))
-                btn.grid(row=i, column=j, padx=2, pady=2)
+                btn.grid(row=i, column=j, padx=2, pady=2, sticky=(tk.N, tk.S, tk.W, tk.E))
         
         # 高级功能按钮
-        adv_frame = ttk.LabelFrame(button_frame, text="高级功能", padding="5")
-        adv_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
-        
         adv_buttons = [
             ('diff', 'integrate', 'limit', 'solve'),
-            ('expand', 'factor', 'simplify', 'subs')
+            ('expand', 'factor', 'simplify', 'subs'),
+            ('idiff',)
         ]
-        
+        adv_frame = ttk.LabelFrame(button_frame, text="高级功能", padding="5")
+        adv_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        adv_frame.columnconfigure((0,1,2,3), weight=1)
         for i, row in enumerate(adv_buttons):
+            adv_frame.rowconfigure(i, weight=1)
             for j, btn_text in enumerate(row):
-                btn = ttk.Button(adv_frame, text=btn_text, width=8,
+                btn = ttk.Button(adv_frame, text=btn_text,
                                command=lambda t=btn_text: self.adv_button_click(t))
-                btn.grid(row=i, column=j, padx=2, pady=2)
+                btn.grid(row=i, column=j, padx=2, pady=2, sticky=(tk.N, tk.S, tk.W, tk.E))
+
+        # 右侧面板
+        self.right_frame = ttk.Frame(main_frame)
+        self.right_frame.grid(row=2, column=1, sticky=(tk.N, tk.S, tk.W, tk.E), padx=5)
+        # 移除固定宽度和grid_propagate
+        self.right_frame.rowconfigure(0, weight=1)
+        self.right_frame.columnconfigure(0, weight=1)
         
-        # 中间历史记录
-        history_frame = ttk.LabelFrame(main_frame, text="历史记录", padding="5")
-        history_frame.grid(row=2, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5)
+        header_frame = tk.Frame(self.right_frame, height=50, width=10)
+        header_frame.pack(fill=tk.X, padx=10, pady=10)
+        header_frame.pack_propagate(False)
+
+        # 历史记录按钮
+        self.history_btn = tk.Button(header_frame, text="历史记录", 
+                                    command=lambda: self.switch_right_panel('history'),
+                                    )
+        self.history_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        self.history_text = scrolledtext.ScrolledText(history_frame, width=30, height=20, 
-                                                     font=("Consolas", 10), wrap=tk.WORD)
-        self.history_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # 使用说明按钮
+        self.help_btn = tk.Button(header_frame, text="使用说明",
+                                 command=lambda: self.switch_right_panel('help'),
+                                 )
+        self.help_btn.pack(side=tk.LEFT)
+        
+        # 内容区域
+        self.content_frame = tk.Frame(self.right_frame)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        
+        # 历史记录面板
+        self.history_panel = tk.Frame(self.content_frame)
+        self.history_panel.pack(fill=tk.BOTH, expand=True)
+        
+        # 历史记录文本框
+        self.history_text = scrolledtext.ScrolledText(
+            self.history_panel, 
+            wrap=tk.WORD,
+            width=50,  # 控制每行显示字符数，缩小宽度
+            height=26
+        )
+        self.history_text.pack(fill=tk.BOTH, expand=True)
         
         # 清除历史按钮
-        clear_history_btn = ttk.Button(history_frame, text="清除历史", 
-                                      command=self.clear_history)
-        clear_history_btn.grid(row=1, column=0, pady=(5, 0))
+        clear_history_btn = tk.Button(self.history_panel, text="清除历史记录",
+                                     command=self.clear_history,
+                                     )
+        clear_history_btn.pack(pady=(10, 0))
         
-        # 右侧使用说明（新增）
-        help_frame = ttk.LabelFrame(main_frame, text="使用说明", padding="5")
-        help_frame.grid(row=2, column=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # 使用说明面板
+        self.help_panel = tk.Frame(self.content_frame)
         
         help_text = """基础运算：
 • 数字和运算符：+, -, *, /, (), ^(幂运算)
@@ -165,31 +216,32 @@ class SymPyCalculator:
 
 科学函数：
 • 三角函数：sin, cos, tan, asin, acos, atan
-• 对数函数：ln(自然对数), log(常用对数), exp
-• 其他：sqrt(平方根), abs(绝对值), !(阶乘)
+• 对数函数：ln(自然对数), log10(常用对数), exp
+• 其他：sqrt(平方根), abs(绝对值), factorial(阶乘)
 
 常数：
 • π(pi) - 圆周率
-• e - 自然常数  
+• e(E) - 自然常数  
 • ∞(oo) - 无穷大
 
 微积分：
-• diff(f,x) - 对x求导
-• integrate(f,x) - 对x积分
+• d/dx - 对x求导
+• ∫ - 对x积分
 • limit(f,x,a) - 求f在x→a时的极限
+• idiff(F,y,x) - 隐函数y对x求导
 
 代数运算：
 • solve(eq,x) - 求解方程
 • expand() - 展开表达式
 • factor() - 因式分解
 • simplify() - 简化表达式
+• subs() - 变量替换
 
 变量：
 • 默认变量：x, y, z, t
 • 可直接在表达式中使用
 
 LaTeX显示：
-• 输入保持原样显示
 • 结果以LaTeX格式美化显示
 • 分数：1/2 显示为 ½
 • 幂次：x^2 显示为 x²
@@ -198,41 +250,56 @@ LaTeX显示：
 示例：
 • 基础：2+3*4, sin(pi/2)
 • 微积分：diff(x^2, x), integrate(x^2, x)
+          idiff(x+y^2, y, x)
 • 求解：solve(x^2-4, x)
 • 因式分解：factor(x^2-4)
 
 注意：需要matplotlib库支持LaTeX渲染"""
         
-        self.help_text = scrolledtext.ScrolledText(help_frame, width=35, height=20, 
-                                                  font=("Arial", 9), wrap=tk.WORD,
-                                                  state=tk.DISABLED, bg='#f8f8f8')
-        self.help_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.help_text = scrolledtext.ScrolledText(
+            self.help_panel,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            width=50,
+            height=28
+        )
+        self.help_text.pack(fill=tk.BOTH, expand=True)
         
         # 插入帮助文本
         self.help_text.config(state=tk.NORMAL)
         self.help_text.insert(tk.END, help_text)
         self.help_text.config(state=tk.DISABLED)
         
+        # 初始显示历史记录
+        self.switch_right_panel('history')
+
         # 状态栏
         self.status_var = tk.StringVar()
         self.status_var.set("就绪 - LaTeX显示已启用")
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, 
                               relief=tk.SUNKEN, anchor=tk.W)
-        status_bar.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
+        status_bar.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0))
         
-        # 配置网格权重
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(0, weight=2)  # 按钮区域
-        main_frame.columnconfigure(1, weight=2)  # 历史记录区域
-        main_frame.columnconfigure(2, weight=2)  # 帮助区域
-        main_frame.rowconfigure(2, weight=1)
-        display_frame.columnconfigure(0, weight=1)
-        latex_frame.columnconfigure(0, weight=1)
-        history_frame.columnconfigure(0, weight=1)
-        history_frame.rowconfigure(0, weight=1)
-        help_frame.columnconfigure(0, weight=1)
-        help_frame.rowconfigure(0, weight=1)
+        
+    def switch_right_panel(self, mode):
+        """切换右侧面板显示模式"""
+        self.right_panel_mode = mode
+        
+        # 隐藏所有面板
+        self.history_panel.pack_forget()
+        self.help_panel.pack_forget()
+        
+        # 重置按钮样式
+        self.history_btn.config()
+        self.help_btn.config()
+        
+        # 显示对应面板并高亮按钮
+        if mode == 'history':
+            self.history_panel.pack(fill=tk.BOTH, expand=True)
+            self.history_btn.config()
+        else:
+            self.help_panel.pack(fill=tk.BOTH, expand=True)
+            self.help_btn.config()
         
     def toggle_latex(self):
         """切换LaTeX显示模式"""
@@ -390,7 +457,11 @@ LaTeX显示：
             # 替换（示例：将x替换为1）
             self.entry.delete(0, tk.END)
             self.entry.insert(0, f'({current}).subs(x, 1)')
-            
+        elif text == 'idiff':
+            # 隐函数求导
+            self.entry.delete(0, tk.END)
+            self.entry.insert(0, f'idiff({current},y, x)')
+
     def insert_text(self, text):
         """在光标位置插入文本"""
         cursor_pos = self.entry.index(tk.INSERT)
@@ -523,6 +594,7 @@ LaTeX显示：
             # 微积分函数
             'diff': sp.diff, 'integrate': sp.integrate,
             'limit': sp.limit, 'series': sp.series,
+            'idiff': sp.idiff,
             # 代数函数
             'solve': sp.solve, 'expand': sp.expand,
             'factor': sp.factor, 'simplify': sp.simplify,
